@@ -3,16 +3,32 @@ import { z } from 'zod'
 import DOMPurify from 'isomorphic-dompurify'
 import { prisma } from '@/app/lib/db/client'
 import { logger } from '@/app/lib/logger'
+import { verifyAccessToken } from '@/app/lib/auth/jwt'
 
-// Whitelist: ONLY these fields can be updated by the user
-// role, passwordHash, totpSecret etc. are intentionally absent
 const updateSchema = z.object({
   name: z.string().min(2).max(100).trim().optional(),
   bio: z.string().max(500).trim().optional(),
 })
 
+function getUserIdFromRequest(req: NextRequest): string | null {
+  // Try header first (set by middleware)
+  const headerUserId = req.headers.get('x-user-id')
+  if (headerUserId) return headerUserId
+
+  // Fallback: read cookie directly
+  const token = req.cookies.get('access_token')?.value
+  if (!token) return null
+
+  try {
+    const payload = verifyAccessToken(token)
+    return payload.userId
+  } catch {
+    return null
+  }
+}
+
 export async function PATCH(req: NextRequest) {
-  const userId = req.headers.get('x-user-id')
+  const userId = getUserIdFromRequest(req)
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
 
   if (!userId) {
@@ -21,13 +37,10 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json()
-
-    // Zod strips unknown fields — mass assignment protection
     const data = updateSchema.parse(body)
 
-    // Sanitize bio to prevent stored XSS
     if (data.bio) {
-      data.bio = DOMPurify.sanitize(data.bio, { ALLOWED_TAGS: [] }) // strip all HTML
+      data.bio = DOMPurify.sanitize(data.bio, { ALLOWED_TAGS: [] })
     }
 
     const user = await prisma.user.update({
