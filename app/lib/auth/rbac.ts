@@ -35,5 +35,5 @@ export function canRead(role: string): boolean {
 }
 
 export function canWrite(role: string): boolean {
-  return [ROLES.ADMIN, ROLES.USER].includes(role as Role)
+  return (role === ROLES.ADMIN || role === ROLES.USER)
 }
