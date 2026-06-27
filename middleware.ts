@@ -6,7 +6,7 @@ import { logger } from '@/app/lib/logger'
 
 export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname
-  const ip = req.headers.get('x-forwarded-for') ?? req.ip ?? 'unknown'
+  const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
 
   const correlationId = req.headers.get('x-correlation-id') ?? randomUUID()
 
