@@ -91,6 +91,14 @@ Auto-deployed on every push to `main` via GitHub Actions → Vercel.
 
 AWS infrastructure is provisioned separately. See [`/infra`](./infra/README.md) for setup.
 
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full AWS diagram.
+
+> `Internet → WAF (OWASP rules) → ALB (HTTPS) → EC2 (private subnet, SSM only) → RDS + Secrets Manager + S3 (private)`
+> 
+> GuardDuty · CloudTrail · CloudWatch monitoring all layers.
+
 ---
 
 ## Project structure

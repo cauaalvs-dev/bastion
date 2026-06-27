@@ -1,11 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
-import bcrypt from 'bcryptjs'
-import { prisma } from '@/app/lib/db/client'
-import { signAccessToken, signRefreshToken } from '@/app/lib/auth/jwt'
-import { BCRYPT_ROUNDS } from '@/app/lib/constants'
-import { logger } from '@/app/lib/logger'
-import { randomUUID } from 'crypto'
+import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+import bcrypt from "bcryptjs"
+import { prisma } from "@/app/lib/db/client"
+import { signAccessToken, signRefreshToken } from "@/app/lib/auth/jwt"
+import { BCRYPT_ROUNDS, AUDIT_EVENTS } from "@/app/lib/constants"
+import { audit } from "@/app/lib/audit"
+import { logger } from "@/app/lib/logger"
+import { randomUUID } from "crypto"
+import { rateLimit } from "@/app/lib/rate-limit"
 
 const registerSchema = z.object({
   name: z.string().min(2).max(100).trim(),
@@ -13,12 +15,21 @@ const registerSchema = z.object({
   password: z
     .string()
     .min(8)
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
 })
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+  const ip = req.headers.get("x-forwarded-for") ?? "unknown"
+  const path = "/api/auth/register"
+
+  const rl = await rateLimit('auth-register', ip)
+  if (rl.limited) {
+    return NextResponse.json(
+      { error: `Too many requests. Try again in ${rl.retryAfter}s.` },
+      { status: 429 }
+    )
+  }
 
   try {
     const body = await req.json()
@@ -29,11 +40,13 @@ export async function POST(req: NextRequest) {
     })
 
     if (existing) {
-      // Return same error to prevent email enumeration
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 400 }
-      )
+      await audit({
+        event: AUDIT_EVENTS.REGISTER_FAILURE,
+        ip,
+        path,
+        meta: { reason: "email_already_exists" },
+      })
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 400 })
     }
 
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS)
@@ -66,41 +79,42 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         refreshToken,
         ip,
-        userAgent: req.headers.get('user-agent') ?? undefined,
+        userAgent: req.headers.get("user-agent") ?? undefined,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     })
 
-    logger.info('auth.register.success', { userId: user.id, ip })
+    await audit({ event: AUDIT_EVENTS.REGISTER_SUCCESS, userId: user.id, ip, path })
+    logger.info("auth.register.success", { userId: user.id, ip })
 
     const response = NextResponse.json({ user }, { status: 201 })
 
-    response.cookies.set('access_token', accessToken, {
+    response.cookies.set("access_token", accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
       maxAge: 15 * 60,
-      path: '/',
+      path: "/",
     })
 
-    response.cookies.set('refresh_token', refreshToken, {
+    response.cookies.set("refresh_token", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60,
-      path: '/api/auth/refresh',
+      path: "/api/auth/refresh",
     })
 
     return response
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.flatten().fieldErrors },
+        { error: "Validation failed", details: error.flatten().fieldErrors },
         { status: 422 }
       )
     }
 
-    logger.error('auth.register.error', { ip, meta: { error: String(error) } })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    logger.error("auth.register.error", { ip, meta: { error: String(error) } })
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

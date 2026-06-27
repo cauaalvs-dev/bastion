@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs'
 import { RateLimiterMemory } from 'rate-limiter-flexible'
 import { prisma } from '@/app/lib/db/client'
 import { signAccessToken, signRefreshToken } from '@/app/lib/auth/jwt'
-import { MAX_LOGIN_ATTEMPTS, LOGIN_LOCKOUT_MINUTES } from '@/app/lib/constants'
+import { MAX_LOGIN_ATTEMPTS, LOGIN_LOCKOUT_MINUTES, AUDIT_EVENTS } from '@/app/lib/constants'
+import { audit } from '@/app/lib/audit'
 import { logger } from '@/app/lib/logger'
 import { randomUUID } from 'crypto'
 
@@ -21,11 +22,12 @@ const loginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+  const path = '/api/auth/login'
 
-  // Rate limit by IP
   try {
     await rateLimiter.consume(ip)
   } catch {
+    await audit({ event: AUDIT_EVENTS.LOGIN_RATE_LIMITED, ip, path })
     logger.security('auth.login.rate_limited', { ip })
     return NextResponse.json(
       { error: `Too many attempts. Try again in ${LOGIN_LOCKOUT_MINUTES} minutes.` },
@@ -41,18 +43,22 @@ export async function POST(req: NextRequest) {
       where: { email: data.email },
     })
 
-    // Always run bcrypt comparison — prevents timing attacks on user enumeration
     const dummyHash = '$2a$12$dummyhashtopreventtimingattacks000000000000000'
     const passwordHash = user?.passwordHash ?? dummyHash
 
     const passwordValid = await bcrypt.compare(data.password, passwordHash)
 
     if (!user || !passwordValid) {
+      await audit({
+        event: AUDIT_EVENTS.LOGIN_FAILURE,
+        ip,
+        path,
+        meta: { reason: 'invalid_credentials' },
+      })
       logger.loginFailure(ip, 'invalid_credentials')
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    // 2FA check
     if (user.totpEnabled) {
       if (!data.totpCode) {
         return NextResponse.json({ error: '2FA code required' }, { status: 401 })
@@ -67,12 +73,17 @@ export async function POST(req: NextRequest) {
       })
 
       if (!valid) {
-        logger.loginFailure(ip, 'invalid_totp', '/api/auth/login')
+        await audit({
+          event: AUDIT_EVENTS.LOGIN_TOTP_FAILED,
+          userId: user.id,
+          ip,
+          path,
+        })
+        logger.loginFailure(ip, 'invalid_totp', path)
         return NextResponse.json({ error: 'Invalid 2FA code' }, { status: 401 })
       }
     }
 
-    // Issue new session — rotates session ID on every login (prevents session fixation)
     const sessionId = randomUUID()
 
     const accessToken = signAccessToken({
@@ -97,15 +108,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        event: 'auth.login.success',
-        ip,
-        path: '/api/auth/login',
-      },
-    })
-
+    await audit({ event: AUDIT_EVENTS.LOGIN_SUCCESS, userId: user.id, ip, path })
     logger.loginSuccess(user.id, ip)
 
     const response = NextResponse.json({
