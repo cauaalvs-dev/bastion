@@ -23,7 +23,7 @@ function log(level: LogLevel, event: string, data?: Partial<Omit<LogEntry, 'time
   }
 
   // In production, pipe to CloudWatch via stdout
-  console.log(JSON.stringify(entry))
+  console.log(JSON.stringify(entry)) // eslint-disable-line no-console
 
   return entry.correlationId
 }
