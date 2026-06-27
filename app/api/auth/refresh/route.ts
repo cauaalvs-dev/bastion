@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/db/client'
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '@/app/lib/auth/jwt'
 import { AUDIT_EVENTS } from '@/app/lib/constants'
+import { rateLimit } from '@/app/lib/rate-limit'
 import { audit } from '@/app/lib/audit'
 import { logger } from '@/app/lib/logger'
 import { randomUUID } from 'crypto'
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
   const path = '/api/auth/refresh'
   const oldRefreshToken = req.cookies.get('refresh_token')?.value
+
+  const rl = await rateLimit('auth-soft', ip)
+  if (rl.limited) {
+    return NextResponse.json(
+      { error: `Too many requests. Try again in ${rl.retryAfter}s.` },
+      { status: 429 }
+    )
+  }
 
   if (!oldRefreshToken) {
     return NextResponse.json({ error: 'No refresh token' }, { status: 401 })

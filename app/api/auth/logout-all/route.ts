@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/app/lib/db/client'
 import { verifyAccessToken } from '@/app/lib/auth/jwt'
 import { AUDIT_EVENTS } from '@/app/lib/constants'
+import { rateLimit } from '@/app/lib/rate-limit'
 import { audit } from '@/app/lib/audit'
 import { logger } from '@/app/lib/logger'
 
@@ -10,6 +11,14 @@ export async function POST(req: NextRequest) {
   const path = '/api/auth/logout-all'
 
   const accessToken = req.cookies.get('access_token')?.value
+
+  const rl = await rateLimit('auth-soft', ip)
+  if (rl.limited) {
+    return NextResponse.json(
+      { error: `Too many requests. Try again in ${rl.retryAfter}s.` },
+      { status: 429 }
+    )
+  }
 
   if (!accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

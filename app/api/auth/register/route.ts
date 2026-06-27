@@ -7,6 +7,7 @@ import { BCRYPT_ROUNDS, AUDIT_EVENTS } from "@/app/lib/constants"
 import { audit } from "@/app/lib/audit"
 import { logger } from "@/app/lib/logger"
 import { randomUUID } from "crypto"
+import { rateLimit } from "@/app/lib/rate-limit"
 
 const registerSchema = z.object({
   name: z.string().min(2).max(100).trim(),
@@ -21,6 +22,14 @@ const registerSchema = z.object({
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") ?? "unknown"
   const path = "/api/auth/register"
+
+  const rl = await rateLimit('auth-register', ip)
+  if (rl.limited) {
+    return NextResponse.json(
+      { error: `Too many requests. Try again in ${rl.retryAfter}s.` },
+      { status: 429 }
+    )
+  }
 
   try {
     const body = await req.json()
