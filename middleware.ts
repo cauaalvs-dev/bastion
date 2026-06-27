@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { verifyAccessToken } from '@/app/lib/auth/jwt'
 import { ADMIN_ROUTES, PUBLIC_ROUTES, ROLES } from '@/app/lib/constants'
 import { logger } from '@/app/lib/logger'
@@ -7,9 +8,13 @@ export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname
   const ip = req.headers.get('x-forwarded-for') ?? req.ip ?? 'unknown'
 
+  const correlationId = req.headers.get('x-correlation-id') ?? randomUUID()
+
   // Allow public routes through
   if (PUBLIC_ROUTES.some(route => path.startsWith(route))) {
-    return NextResponse.next()
+    const res = NextResponse.next()
+    res.headers.set('x-correlation-id', correlationId)
+    return res
   }
 
   const token = req.cookies.get('access_token')?.value
