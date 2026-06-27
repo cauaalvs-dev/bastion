@@ -71,3 +71,30 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+// VULNERABILITY: Mass Assignment
+// This endpoint exists ONLY to demonstrate and document the vulnerability
+// See SECURITY-REPORT.md entry #06 for exploit details and remediation
+
+// VULN: PUT /api/users/me — accepts any field from request body without allowlist
+// Attacker sends: { "role": "admin" } and escalates privileges
+// Effect: user can overwrite role, passwordHash, or any other DB field
+export async function PUT(req: NextRequest) {
+  const userId = getUserIdFromRequest(req)
+  const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await req.json()
+
+  // VULNERABLE: spreads entire request body into prisma.update — no field allowlist
+  // Payload: { "role": "admin" } → user becomes admin
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { ...body },
+  })
+
+  return NextResponse.json({ user, _debug: { warning: 'mass assignment — no field allowlist' } })
+}
