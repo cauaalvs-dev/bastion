@@ -49,6 +49,7 @@ export const AUDIT_EVENTS = {
   TOTP_ENABLED:         'auth.2fa.enabled',
   TOTP_VERIFIED:        'auth.2fa.verified',
   TOTP_FAILED:          'auth.2fa.failed',
+  TOTP_DISABLED:        'auth.2fa.disabled',
   // Session
   LOGOUT:               'auth.logout',
 } as const

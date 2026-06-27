@@ -4,6 +4,8 @@ import speakeasy from 'speakeasy'
 import QRCode from 'qrcode'
 import { prisma } from '@/app/lib/db/client'
 import { logger } from '@/app/lib/logger'
+import { audit } from '@/app/lib/audit'
+import { AUDIT_EVENTS } from '@/app/lib/constants'
 
 // POST /api/auth/2fa/setup — generate secret + QR code
 export async function POST(req: NextRequest) {
@@ -79,9 +81,7 @@ export async function PUT(req: NextRequest) {
     data: { totpEnabled: true },
   })
 
-  await prisma.auditLog.create({
-    data: { userId, event: 'auth.2fa.enabled', ip },
-  })
+  await audit({ event: AUDIT_EVENTS.TOTP_ENABLED, userId, ip, path: '/api/auth/2fa/setup' })
 
   logger.security('auth.2fa.enabled', { userId, ip })
 
