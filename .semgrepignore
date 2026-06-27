@@ -1,0 +1,8 @@
+# Intentionally vulnerable routes — exist for security research and documentation
+# See SECURITY-REPORT.md for exploit details and remediation
+app/api/invoices/search/route.ts
+app/api/users/search/route.ts
+app/api/users/bio/route.ts
+app/api/users/email/route.ts
+app/api/auth/verify-vuln/route.ts
+app/api/admin/users/route.ts

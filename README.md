@@ -1,6 +1,6 @@
 # bastion
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38BDF8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
 [![AWS](https://img.shields.io/badge/AWS-EC2%20%7C%20S3%20%7C%20WAF-FF9900?style=flat-square&logo=amazonaws)](https://aws.amazon.com/)
@@ -11,7 +11,7 @@ A full-stack SaaS application built to be **intentionally broken — then secure
 
 > **Goal**: Build a system I would try to break myself — then make it impossible.
 
-🔗 **Live**: [bastion.vercel.app](https://bastion.vercel.app) · 📋 **Security Report**: [SECURITY-REPORT.md](./SECURITY-REPORT.md)
+📋 **Security Report**: [SECURITY-REPORT.md](./SECURITY-REPORT.md)
 
 ---
 
@@ -29,7 +29,7 @@ This is not a tutorial project. It is a professional security portfolio.
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Frontend | Next.js 15, TypeScript, Tailwind CSS |
 | Backend | Next.js Route Handlers (API) |
 | Database | Supabase (PostgreSQL + RLS) |
 | ORM | Prisma |
@@ -106,19 +106,24 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full AWS diagram.
 ```
 bastion/
 ├── app/
-│   ├── api/              # Route Handlers (REST API)
-│   ├── components/
-│   │   ├── ui/           # Shared UI primitives
-│   │   └── public/       # Public-facing components
+│   ├── api/
+│   │   ├── auth/
+│   │   ├── invoices/
+│   │   ├── users/
+│   │   └── admin/
 │   └── lib/
-│       ├── auth/         # JWT, session, RBAC logic
-│       ├── db/           # Prisma client + queries
-│       └── constants.ts  # App-wide constants
-├── infra/                # AWS setup documentation
+│       ├── auth/
+│       ├── db/
+│       ├── rate-limit/
+│       ├── audit.ts
+│       ├── logger.ts
+│       └── constants.ts
+├── prisma/
+├── infra/
 ├── .github/
-│   └── workflows/        # CI/CD pipelines
+│   └── workflows/
+├── SECURITY-REPORT.md
 ├── SECURITY.md
-├── SECURITY-REPORT.md    # Vulnerability research log
 └── CHANGELOG.md
 ```
 

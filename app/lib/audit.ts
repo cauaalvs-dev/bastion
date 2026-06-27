@@ -25,6 +25,6 @@ export async function audit(input: AuditInput): Promise<void> {
     })
   } catch (err) {
     // Falha no audit nunca propaga — observabilidade não pode derrubar fluxo principal
-    console.error('[audit] write_failed', { event: input.event, err })
+    console.error('[audit] write_failed', { event: input.event, err }) // eslint-disable-line no-console
   }
 }
